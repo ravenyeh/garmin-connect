@@ -1,35 +1,35 @@
 # garmin-connect
 
-## v1.6.0 refactor
+## v1.6.0 重構
 
-TODO:
+待辦事項：
 
--   [x] New HttpClient class
--   [x] Login and get user token
--   [x] Garmin URLs works with `garmin.cn` and `garmin.com`
--   [x] Auto refresh Ouath2 token
--   [x] Oauth1,Oauth2 token import and export.
--   [x] Download Activity, countActivities, getActivities, getActivity, getUserProfile, getUserSettings
--   [x] Upload Activity, delete Activity
--   [ ] Implementation of other methods, such as Badge,Workout,Gear etc
--   [x] Handle MFA (with email OTP support)
--   [x] Handle Account locked
--   [ ] Unit test
+-   [x] 新的 HttpClient 類別
+-   [x] 登入並取得使用者 token
+-   [x] Garmin URL 支援 `garmin.cn` 和 `garmin.com`
+-   [x] 自動刷新 OAuth2 token
+-   [x] OAuth1、OAuth2 token 匯入與匯出
+-   [x] 下載活動、countActivities、getActivities、getActivity、getUserProfile、getUserSettings
+-   [x] 上傳活動、刪除活動
+-   [ ] 其他方法的實作，例如 Badge、Workout、Gear 等
+-   [x] 處理 MFA（支援 Email OTP）
+-   [x] 處理帳號鎖定
+-   [ ] 單元測試
 -   [ ] Listeners
 
-If something is not working, please check [https://connect.garmin.com/status/](https://connect.garmin.com/status/) first.
+如果功能異常，請先檢查 [https://connect.garmin.com/status/](https://connect.garmin.com/status/)。
 
-Currently, most of previous features are working, but some of Rest API are not added, such as `Gear`,`Workout`,`Badge` etc. So if you need these features, please add a PR.
+目前大部分先前的功能都可正常使用，但部分 REST API 尚未加入，例如 `Gear`、`Workout`、`Badge` 等。如果您需要這些功能，歡迎提交 PR。
 
-All of above work inspired by [https://github.com/matin/garth](https://github.com/matin/garth). Many thanks.
+以上工作靈感來自 [https://github.com/matin/garth](https://github.com/matin/garth)，非常感謝。
 
 ---
 
-A powerful JavaScript library for connecting to Garmin Connect for sending and receiving health and workout data. It comes with some predefined methods to get and set different kinds of data for your Garmin account, but also have the possibility to make [custom requests](#custom-requests) `GET`, `POST` and `PUT` are currently supported. This makes it easy to implement whatever may be missing to suite your needs.
+一個強大的 JavaScript 函式庫，用於連接 Garmin Connect 來傳送和接收健康與運動數據。它內建了一些預定義方法來取得和設定 Garmin 帳號的不同類型數據，同時也支援[自訂請求](#自訂請求)，目前支援 `GET`、`POST` 和 `PUT`。這讓您可以輕鬆實作任何缺少的功能以滿足需求。
 
-## Prerequisites
+## 前置需求
 
-This library will require you to add a configuration file to your project root called `garmin.config.json` containing your username and password for the Garmin Connect service.
+此函式庫需要您在專案根目錄新增一個名為 `garmin.config.json` 的設定檔，包含您的 Garmin Connect 帳號和密碼。
 
 ```json
 {
@@ -38,41 +38,41 @@ This library will require you to add a configuration file to your project root c
 }
 ```
 
-## How to install
+## 如何安裝
 
 ```shell
 $ npm install garmin-connect
 ```
 
-## How to use
+## 如何使用
 
 ```js
 const { GarminConnect } = require('garmin-connect');
-// Create a new Garmin Connect Client
+// 建立新的 Garmin Connect 客戶端
 const GCClient = new GarminConnect({
     username: 'my.email@example.com',
     password: 'MySecretPassword'
 });
-// Uses credentials from garmin.config.json or uses supplied params
+// 使用 garmin.config.json 的憑證或提供的參數
 await GCClient.login();
 const userProfile = await GCClient.getUserProfile();
 ```
 
-Now you can check `userProfile.userName` to verify that your login was successful.
+現在您可以檢查 `userProfile.userName` 來確認登入是否成功。
 
-## MFA (Multi-Factor Authentication) Support
+## MFA（多重要素驗證）支援
 
-If your Garmin account has MFA enabled, `login()` will return an MFA result instead of completing the login. You'll need to verify the MFA code sent to your email.
+如果您的 Garmin 帳號啟用了 MFA，`login()` 會回傳 MFA 結果而非直接完成登入。您需要驗證寄送到您 email 的 MFA 驗證碼。
 
-### Environment Setup
+### 環境設定
 
-Set the `MFA_SECRET_KEY` environment variable (at least 32 characters) for encrypting MFA session state:
+設定 `MFA_SECRET_KEY` 環境變數（至少 32 字元）用於加密 MFA 會話狀態：
 
 ```bash
 export MFA_SECRET_KEY="your-very-long-secret-key-here-32ch"
 ```
 
-### Basic MFA Flow
+### 基本 MFA 流程
 
 ```js
 const { GarminConnect } = require('garmin-connect');
@@ -84,160 +84,159 @@ const GCClient = new GarminConnect({
 
 const result = await GCClient.login();
 
-// Check if MFA is required
+// 檢查是否需要 MFA
 if ('needsMFA' in result && result.needsMFA) {
-    console.log('MFA required! Check your email for the verification code.');
+    console.log('需要 MFA 驗證！請檢查您的 email 取得驗證碼。');
 
-    // Get MFA code from user (via prompt, API, etc.)
-    const mfaCode = '123456'; // Code from email
+    // 從使用者取得 MFA 驗證碼（透過提示、API 等）
+    const mfaCode = '123456'; // 來自 email 的驗證碼
 
-    // Complete login with MFA
+    // 使用 MFA 完成登入
     await GCClient.verifyMFA(result.mfaSession, mfaCode);
 }
 
-// Now you can use the client normally
+// 現在可以正常使用客戶端
 const userProfile = await GCClient.getUserProfile();
 ```
 
-### Web Application (Serverless) Flow
+### Web 應用程式（Serverless）流程
 
-For serverless environments like Vercel, the MFA flow works across two HTTP requests:
+對於 Vercel 等 Serverless 環境，MFA 流程跨越兩個 HTTP 請求：
 
-**Request 1 - Initial Login:**
+**請求 1 - 初始登入：**
 
 ```js
 const result = await GCClient.login(email, password);
 if (result.needsMFA) {
-    // Return mfaSession to frontend
+    // 將 mfaSession 回傳給前端
     return { needsMFA: true, mfaSession: result.mfaSession };
 }
 ```
 
-**Request 2 - MFA Verification:**
+**請求 2 - MFA 驗證：**
 
 ```js
-// Receive mfaSession and mfaCode from frontend
+// 從前端接收 mfaSession 和 mfaCode
 await GCClient.verifyMFA(mfaSession, mfaCode);
-// Login complete!
+// 登入完成！
 ```
 
-See `examples/api-example.js` for a complete Vercel API implementation.
+完整的 Vercel API 實作範例請參考 `examples/api-example.js`。
 
-## Reusing your session(since v1.6.0)
+## 重用會話（v1.6.0 起）
 
-### Save token to file and reuse it.
+### 儲存 token 至檔案並重用
 
 ```js
 GCClient.saveTokenToFile('/path/to/save/tokens');
 ```
 
-Result:
+結果：
 
 ```bash
 $ ls /path/to/save/tokens
 oauth1_token.json oauth2_token.json
 ```
 
-Reuse token:
+重用 token：
 
 ```js
 GCClient.loadTokenByFile('/path/to/save/tokens');
 ```
 
-### Or just save your token to db or other storage.
+### 或將 token 儲存至資料庫或其他儲存空間
 
 ```js
 const oauth1 = GCClient.client.oauth1Token;
 const oauth2 = GCClient.client.oauth2Token;
-// save to db or other storage
+// 儲存至資料庫或其他儲存空間
 ...
 ```
 
-Reuse token:
+重用 token：
 
 ```js
 GCClient.loadToken(oauth1, oauth2);
 ```
 
-## Reusing your session(deprecated)
+## 重用會話（已棄用）
 
-This is an experimental feature and might not yet provide full stability.
+這是實驗性功能，可能尚未完全穩定。
 
-After a successful login the `sessionJson` getter and setter can be used to export and restore your session.
+成功登入後，可以使用 `sessionJson` 的 getter 和 setter 來匯出和還原您的會話。
 
 ```js
-// Exporting the session
+// 匯出會話
 const session = GCClient.sessionJson;
 
-// Use this instead of GCClient.login() to restore the session
-// This will throw an error if the stored session cannot be reused
+// 使用此方法取代 GCClient.login() 來還原會話
+// 如果儲存的會話無法重用，將會拋出錯誤
 GCClient.restore(session);
 ```
 
-The exported session should be serializable and can be stored as a JSON string.
+匯出的會話可被序列化並儲存為 JSON 字串。
 
-A stored session can only be reused once and will need to be stored after each request. This can be done by attaching some storage to the `sessionChange` event.
+已儲存的會話只能使用一次，每次請求後都需要重新儲存。這可以透過將儲存功能附加到 `sessionChange` 事件來完成。
 
 ```js
 GCClient.onSessionChange((session) => {
     /*
-        Your choice of storage here
-        node-persist will probably work in most cases 
+        在此選擇您的儲存方式
+        node-persist 在大多數情況下都能使用
      */
 });
 ```
 
-### Login fallback
+### 登入備援
 
-To make sure to use a stored session if possible, but fallback to regular login, one can use the `restoreOrLogin` method.
-The arguments `username` and `password` are both optional and the regular `.login()` will be
-called if session restore fails.
+為了確保盡可能使用已儲存的會話，但在失敗時回退到一般登入，可以使用 `restoreOrLogin` 方法。
+參數 `username` 和 `password` 都是可選的，如果會話還原失敗，將呼叫一般的 `.login()`。
 
 ```js
 await GCClient.restoreOrLogin(session, username, password);
 ```
 
-## Events
+## 事件
 
--   `sessionChange` will trigger on a change in the current `sessionJson`
+-   `sessionChange` 會在 `sessionJson` 變更時觸發
 
-To attach a listener to an event, use the `.on()` method.
+要監聽事件，使用 `.on()` 方法。
 
 ```js
 GCClient.on('sessionChange', (session) => console.log(session));
 ```
 
-There's currently no way of removing listeners.
+目前沒有移除 listener 的方法。
 
-## Reading data
+## 讀取數據
 
-### User info is not implemented yet. // TODO: Implement this function
+### 使用者資訊尚未實作 // TODO: 實作此功能
 
-Receive basic user information
+取得基本使用者資訊
 
 ```js
 GCClient.getUserInfo();
 ```
 
-### Social Profile is not implemented yet. // TODO: Implement this function
+### 社交個人資料尚未實作 // TODO: 實作此功能
 
-Receive social user information
+取得社交使用者資訊
 
 ```js
 GCClient.getSocialProfile();
 ```
 
-### Social Connections is not implemented yet. // TODO: Implement this function
+### 社交連結尚未實作 // TODO: 實作此功能
 
-Get a list of all social connections
+取得所有社交連結列表
 
 ```js
 GCClient.getSocialConnections();
 ```
 
-### Device info is not implemented yet. // TODO: Implement this function
+### 裝置資訊尚未實作 // TODO: 實作此功能
 
-Get a list of all registered devices including model numbers and firmware versions.
+取得所有已註冊裝置的列表，包含型號和韌體版本。
 
 ```js
 GCClient.getDeviceInfo();
@@ -245,20 +244,20 @@ GCClient.getDeviceInfo();
 
 ### `getActivities(start: number, limit: number, activityType?: ActivityType, subActivityType?: ActivitySubType): Promise<IActivity[]>`
 
-Retrieves a list of activities based on specified parameters.
+根據指定參數取得活動列表。
 
-#### Parameters:
+#### 參數：
 
--   `start` (number, optonal): Index to start fetching activities.
--   `limit` (number, optonal): Number of activities to retrieve.
--   `activityType` (ActivityType, optional): Type of activity (if specified, start must be null).
--   `subActivityType` (ActivitySubType, optional): Subtype of activity (if specified, start must be null).
+-   `start` (number, 可選)：開始取得活動的索引。
+-   `limit` (number, 可選)：要取得的活動數量。
+-   `activityType` (ActivityType, 可選)：活動類型（如指定，start 必須為 null）。
+-   `subActivityType` (ActivitySubType, 可選)：活動子類型（如指定，start 必須為 null）。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<IActivity[]>`: A Promise that resolves to an array of activities.
+-   `Promise<IActivity[]>`：解析為活動陣列的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const activities = await GCClient.getActivities(
@@ -271,19 +270,19 @@ const activities = await GCClient.getActivities(
 
 ### `getActivity(activity: { activityId: GCActivityId }): Promise<IActivity>`
 
-Retrieves details for a specific activity based on the provided `activityId`.
+根據提供的 `activityId` 取得特定活動的詳細資訊。
 
-#### Parameters:
+#### 參數：
 
--   `activity` (object): An object containing the `activityId` property.
+-   `activity` (object)：包含 `activityId` 屬性的物件。
 
-    -   `activityId` (GCActivityId): Identifier for the desired activity.
+    -   `activityId` (GCActivityId)：所需活動的識別碼。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<IActivity>`: A Promise that resolves to the details of the specified activity.
+-   `Promise<IActivity>`：解析為指定活動詳細資訊的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const activityDetails = await GCClient.getActivity({
@@ -291,43 +290,43 @@ const activityDetails = await GCClient.getActivity({
 });
 ```
 
-### News Feed is not implemented yet. // TODO: Implement this function
+### 動態消息尚未實作 // TODO: 實作此功能
 
-To get a list of activities in your news feed, use the `getNewsFeed` method. This function takes two arguments, _start_ and _limit_, which is used for pagination. Both are optional and will default to whatever Garmin Connect is using. To be sure to get all activities, use this correctly.
+要取得動態消息中的活動列表，使用 `getNewsFeed` 方法。此方法接受 _start_ 和 _limit_ 兩個參數用於分頁。兩者都是可選的，預設值為 Garmin Connect 的預設值。為確保取得所有活動，請正確使用此方法。
 
 ```js
-// Get the news feed with a default length with most recent activities
+// 取得預設長度的動態消息，包含最近的活動
 GCClient.getNewsFeed();
-// Get activities in feed, 10 through 15. (start 10, limit 5)
+// 取得動態消息中的活動，第 10 到 15 筆（起始 10，限制 5）
 GCClient.getNewsFeed(10, 5);
 ```
 
-### Download original activity data
+### 下載原始活動數據
 
-Use the activityId to download the original activity data. Usually this is supplied as a .zip file.
+使用 activityId 下載原始活動數據。通常以 .zip 檔案提供。
 
 ```js
 const [activity] = await GCClient.getActivities(0, 1);
-// Directory path is optional and defaults to the current working directory.
-// Downloads filename will be supplied by Garmin.
+// 目錄路徑為可選，預設為當前工作目錄。
+// 下載檔名由 Garmin 提供。
 GCClient.downloadOriginalActivityData(activity, './some/path/that/exists');
 ```
 
-### Upload activity file
+### 上傳活動檔案
 
-Uploads an activity file as a new Activity. The file can be a `gpx`, `tcx`, or `fit` file. If the activity already exists, the result will have a status code of 409.
-Upload fixed in 1.4.4, Garmin changed the upload api, the response `detailedImportResult` doesn't contain the new activityId.
+上傳活動檔案作為新活動。檔案可以是 `gpx`、`tcx` 或 `fit` 格式。如果活動已存在，回應會有 409 狀態碼。
+上傳在 1.4.4 版修復，Garmin 更改了上傳 API，回應的 `detailedImportResult` 不再包含新的 activityId。
 
 ```js
 const upload = await GCClient.uploadActivity('./some/path/to/file.fit');
-// not working
+// 不再可用
 const activityId = upload.detailedImportResult.successes[0].internalId;
 const uploadId = upload.detailedImportResult.uploadId;
 ```
 
-### Upload activity image
+### 上傳活動圖片
 
-Uploads an image to activity
+上傳圖片至活動
 
 ```js
 const [latestActivty] = await GCClient.getActivities(0, 1);
@@ -338,9 +337,9 @@ const upload = await GCClient.uploadImage(
 );
 ```
 
-### Delete activity image
+### 刪除活動圖片
 
-Delete an image from activity
+從活動中刪除圖片
 
 ```js
 const [activity] = await GCClient.getActivities(0, 1);
@@ -354,17 +353,17 @@ await GCClient.deleteImage(
 
 ### `getSteps(date?: Date): Promise<number>`
 
-Retrieves the total steps for a given date.
+取得指定日期的總步數。
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of the steps information requested; defaults to today if no date is supplied.
+-   `date` (Date, 可選)：請求步數資訊的日期；如未提供則預設為今天。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<number>`: A Promise that resolves to the total steps for the specified date.
+-   `Promise<number>`：解析為指定日期總步數的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const totalSteps = await GCClient.getSteps(new Date('2020-03-24'));
@@ -372,28 +371,28 @@ const totalSteps = await GCClient.getSteps(new Date('2020-03-24'));
 
 ### `getSleepData(date: string): Promise<SleepData>`
 
-Retrieves all sleep data for a given date
+取得指定日期的所有睡眠數據
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of information requested, this will default to today if no date is supplied
+-   `date` (Date, 可選)：請求資訊的日期，如未提供則預設為今天
 
-#### Returns:
+#### 回傳：
 
--   `Promise<SleepData>`: A Promise that resolves to an object containing detailed sleep information.
+-   `Promise<SleepData>`：解析為包含詳細睡眠資訊的物件的 Promise。
 
-    -   `dailySleepDTO` (object): Information about the user's daily sleep.
-        -   `id` (number): The unique identifier of the sleep record.
-        -   `userProfilePK` (number): The user's profile identifier.
-        -   `calendarDate` (string): The date of the sleep record.
+    -   `dailySleepDTO` (object)：使用者每日睡眠資訊。
+        -   `id` (number)：睡眠記錄的唯一識別碼。
+        -   `userProfilePK` (number)：使用者的個人資料識別碼。
+        -   `calendarDate` (string)：睡眠記錄的日期。
         -   ...
-    -   `sleepMovement` (array): An array of sleep movement data.
-    -   `remSleepData` (boolean): Indicates whether REM sleep data is available.
-    -   `sleepLevels` (array): An array of sleep levels data.
-    -   `restlessMomentsCount` (number): Count of restless moments during sleep.
+    -   `sleepMovement` (array)：睡眠動作數據陣列。
+    -   `remSleepData` (boolean)：表示是否有 REM 睡眠數據。
+    -   `sleepLevels` (array)：睡眠階段數據陣列。
+    -   `restlessMomentsCount` (number)：睡眠中不安時刻的計數。
     -   ...
 
-#### Example:
+#### 範例：
 
 ```js
 const detailedSleep = await GCClient.getSleepDuration(new Date('2020-03-24'));
@@ -401,20 +400,20 @@ const detailedSleep = await GCClient.getSleepDuration(new Date('2020-03-24'));
 
 ### `getSleepDuration(date: string): Promise<{hours: number, minutes: number}`
 
-Retrieves hours and minutes slept for a given date
+取得指定日期的睡眠時數和分鐘數
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of information requested, this will default to today if no date is supplied
+-   `date` (Date, 可選)：請求資訊的日期，如未提供則預設為今天
 
-#### Returns:
+#### 回傳：
 
--   `Promise<{hours: string, minutes: string }>`: A Promise that resolves to an object containing information about the sleep duration
+-   `Promise<{hours: string, minutes: string }>`：解析為包含睡眠時長資訊的物件的 Promise
 
-    -   `hours` (string): Number of hours
-    -   `minutes` (string): Number of minutes
+    -   `hours` (string)：小時數
+    -   `minutes` (string)：分鐘數
 
-#### Example:
+#### 範例：
 
 ```js
 const detailedSleep = await GCClient.getSleepDuration(new Date('2020-03-24'));
@@ -422,21 +421,21 @@ const detailedSleep = await GCClient.getSleepDuration(new Date('2020-03-24'));
 
 ### `getDailyWeightData(date?: Date): Promise<number>`
 
-Retrieves the daily weight and converts it from grams to pounds.
+取得每日體重並從公克轉換為磅。
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of information requested. Defaults to the current date.
+-   `date` (Date, 可選)：請求資訊的日期。預設為當前日期。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<number>`: A Promise that resolves to the daily weight converted from grams to pounds.
+-   `Promise<number>`：解析為從公克轉換為磅的每日體重的 Promise。
 
-#### Throws:
+#### 拋出：
 
--   `Error`: If valid daily weight data cannot be found for the specified date.
+-   `Error`：如果無法找到指定日期的有效每日體重數據。
 
-#### Example:
+#### 範例：
 
 ```js
 const weightData = await GCClient.getDailyWeightData(new Date('2023-12-25'));
@@ -444,17 +443,17 @@ const weightData = await GCClient.getDailyWeightData(new Date('2023-12-25'));
 
 ### `getDailyWeightInPounds(date?: Date): Promise<number>`
 
-Retrieves the daily weight in pounds for a given date.
+取得指定日期的每日體重（磅）。
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of information requested; defaults to today if no date is supplied.
+-   `date` (Date, 可選)：請求資訊的日期；如未提供則預設為今天。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<number>`: A Promise that resolves to the daily weight in pounds.
+-   `Promise<number>`：解析為每日體重（磅）的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const weightInPounds = await GCClient.getDailyWeightInPounds(
@@ -464,21 +463,21 @@ const weightInPounds = await GCClient.getDailyWeightInPounds(
 
 ## `getDailyHydration(date?: Date): Promise<number>`
 
-Retrieves the daily hydration data and converts it from milliliters to ounces.
+取得每日水分攝取數據並從毫升轉換為盎司。
 
-### Parameters:
+### 參數：
 
--   `date` (Date, optional): Date of the requested information. Defaults to the current date.
+-   `date` (Date, 可選)：請求資訊的日期。預設為當前日期。
 
-### Returns:
+### 回傳：
 
--   `Promise<number>`: A Promise that resolves to the daily hydration data converted from milliliters to ounces.
+-   `Promise<number>`：解析為從毫升轉換為盎司的每日水分攝取數據的 Promise。
 
-### Throws:
+### 拋出：
 
--   `Error`: If valid daily hydration data cannot be found for the specified date or if the response is invalid.
+-   `Error`：如果無法找到指定日期的有效每日水分攝取數據或回應無效。
 
-### Example:
+### 範例：
 
 ```js
 const hydrationInOunces = await GCClient.getDailyHydration(
@@ -488,13 +487,13 @@ const hydrationInOunces = await GCClient.getDailyHydration(
 
 ### `getGolfSummary(): Promise<GolfSummary>`
 
-Retrieves a summary of golf scorecard data.
+取得高爾夫計分卡摘要數據。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<GolfSummary>`: A Promise that resolves to the golf scorecard summary.
+-   `Promise<GolfSummary>`：解析為高爾夫計分卡摘要的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const golfSummary = await GCClient.getGolfSummary();
@@ -502,44 +501,44 @@ const golfSummary = await GCClient.getGolfSummary();
 
 ### `getGolfScorecard(scorecardId: number): Promise<GolfScorecard>`
 
-Retrieves golf scorecard data for a specific scorecard.
+取得特定計分卡的高爾夫計分卡數據。
 
-#### Parameters:
+#### 參數：
 
--   `scorecardId` (number): Identifier for the desired golf scorecard.
+-   `scorecardId` (number)：所需高爾夫計分卡的識別碼。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<GolfScorecard>`: A Promise that resolves to the golf scorecard data.
+-   `Promise<GolfScorecard>`：解析為高爾夫計分卡數據的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
-const scorecardId = 123; // Replace with the desired scorecard ID
+const scorecardId = 123; // 替換為所需的計分卡 ID
 const golfScorecard = await GCClient.getGolfScorecard(scorecardId);
 ```
 
 ### `getHeartRate(date?: Date): Promise<HeartRate>`
 
-Retrieves daily heart rate data for a given date.
+取得指定日期的每日心率數據。
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of the heart rate data requested; defaults to today if no date is supplied.
+-   `date` (Date, 可選)：請求心率數據的日期；如未提供則預設為今天。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<HeartRate>`: A Promise that resolves to the daily heart rate data.
+-   `Promise<HeartRate>`：解析為每日心率數據的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const heartRateData = await GCClient.getHeartRate(new Date('2020-03-24'));
 ```
 
-## Modifying data
+## 修改數據
 
-### Update activity is not implemented yet. // TODO: Implement this function
+### 更新活動尚未實作 // TODO: 實作此功能
 
 ```js
 const activities = await GCClient.getActivities(0, 1);
@@ -548,9 +547,9 @@ activity['activityName'] = 'The Updated Name';
 await GCClient.updateActivity(activity);
 ```
 
-### Delete an activity
+### 刪除活動
 
-Deletes an activty.
+刪除一個活動。
 
 ```js
 const activities = await GCClient.getActivities(0, 1);
@@ -560,18 +559,18 @@ await GCClient.deleteActivity(activity);
 
 ### `updateHydrationLogOunces(date?: Date, valueInOz: number): Promise<WaterIntake>`
 
-Adds a hydration log entry in ounces for a given date.
+為指定日期新增水分攝取記錄（盎司）。
 
-#### Parameters:
+#### 參數：
 
--   `date` (Date, optional): Date of the log entry; defaults to today if no date is supplied.
--   `valueInOz` (number): Amount of water intake in ounces. Accepts negative number.
+-   `date` (Date, 可選)：記錄的日期；如未提供則預設為今天。
+-   `valueInOz` (number)：水分攝取量（盎司）。接受負數。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<WaterIntake>`: A Promise that resolves to the hydration log entry.
+-   `Promise<WaterIntake>`：解析為水分攝取記錄的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 const hydrationLogEntry = await GCClient.addHydrationLogOunces(
@@ -582,37 +581,37 @@ const hydrationLogEntry = await GCClient.addHydrationLogOunces(
 
 ### `updateWeight(date = new Date(), lbs: number, timezone: string): Promise<UpdateWeight>`
 
-Updates weight information
+更新體重資訊
 
-#### Parameters:
+#### 參數：
 
--   `date` (optional): Date object representing the weight entry date. Defaults to the current date if not provided.
--   `lbs` (number): Weight value in pounds.
--   `timezone` (string): String representing the timezone for the weight entry.
+-   `date` (可選)：代表體重記錄日期的 Date 物件。如未提供則預設為當前日期。
+-   `lbs` (number)：體重值（磅）。
+-   `timezone` (string)：體重記錄的時區字串。
 
-#### Returns:
+#### 回傳：
 
--   `Promise<UpdateWeight>`: A Promise that resolves to the result of the weight update.
+-   `Promise<UpdateWeight>`：解析為體重更新結果的 Promise。
 
-#### Example:
+#### 範例：
 
 ```js
 await GCClient.updateWeight(undefined, 202.9, 'America/Los_Angeles');
 ```
 
-### Add workout
+### 新增訓練計畫
 
-To add a custom workout, use the `addWorkout` or more specifically `addRunningWorkout`.
+要新增自訂訓練計畫，使用 `addWorkout` 或更具體的 `addRunningWorkout`。
 
 ```js
 GCClient.addRunningWorkout('My 5k run', 5000, 'Some description');
 ```
 
-Will add a running workout of 5km called 'My 5k run' and return a JSON object representing the saved workout.
+將新增一個名為「My 5k run」的 5 公里跑步訓練計畫，並回傳代表已儲存訓練計畫的 JSON 物件。
 
-### Schedule workout
+### 排程訓練計畫
 
-To add a workout to your calendar, first find your workout and then add it to a specific date.
+要將訓練計畫加入行事曆，先找到您的訓練計畫，然後將其加入特定日期。
 
 ```js
 const workouts = await GCClient.getWorkouts();
@@ -620,11 +619,11 @@ const id = workouts[0].workoutId;
 GCClient.scheduleWorkout({ workoutId: id }, new Date('2020-03-24'));
 ```
 
-This will add the workout to a specific date in your calendar and make it show up automatically if you're using any of the Garmin watches.
+這會將訓練計畫加入行事曆中的特定日期，如果您使用 Garmin 手錶，它會自動顯示。
 
-### Delete workout
+### 刪除訓練計畫
 
-Deleting a workout is very similar to [scheduling](#schedule-workout) one.
+刪除訓練計畫與[排程](#排程訓練計畫)非常類似。
 
 ```js
 const workouts = await GCClient.getWorkouts();
@@ -632,20 +631,20 @@ const id = workouts[0].workoutId;
 GCClient.deleteWorkout({ workoutId: id });
 ```
 
-## Custom requests
+## 自訂請求
 
-This library will handle custom requests to your active Garmin Connect session. There are a lot of different url's that is used, which means that this library probably wont cover them all. By using the network analyze tool you can find url's that are used by Garmin Connect to fetch data.
+此函式庫會處理對您活躍 Garmin Connect 會話的自訂請求。Garmin Connect 使用許多不同的 URL，這表示此函式庫可能無法涵蓋所有 URL。透過使用網路分析工具，您可以找到 Garmin Connect 用來取得數據的 URL。
 
-Let's assume I found a `GET` requests to the following url:
+假設我找到一個 `GET` 請求指向以下 URL：
 
 ```
 https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/22f5f84c-de9d-4ad6-97f2-201097b3b983?date=2020-03-24
 ```
 
-The request can be sent using `GCClient` by running
+可以使用 `GCClient` 執行此請求：
 
 ```js
-// You can get your displayName by using the getUserInfo method;
+// 您可以透過 getUserInfo 方法取得 displayName
 const displayName = '22f5f84c-de9d-4ad6-97f2-201097b3b983';
 const url =
     'https://connect.garmin.com/modern/proxy/wellness-service/wellness/dailyHeartRate/';
@@ -653,31 +652,31 @@ const dateString = '2020-03-24';
 GCClient.get(url + displayName, { date: dateString });
 ```
 
-and will net you the same result as using the provided way
+這會得到與使用內建方法相同的結果：
 
 ```js
 GCClient.getHeartRate();
 ```
 
-Notice how the client will keep track of the url's, your user information as well as keeping the session alive.
+注意客戶端會追蹤 URL、您的使用者資訊，並保持會話活躍。
 
-## Limitations
+## 限制
 
-Many responses from Garmin Connect are missing type definitions and defaults to `unknown`. Feel free to add types by opening a pull request.
+許多 Garmin Connect 的回應缺少型別定義，預設為 `unknown`。歡迎透過提交 PR 來新增型別。
 
-For now, this library only supports the following:
+目前此函式庫支援以下功能：
 
--   Get user info
--   Get social user info
--   Get heart rate
--   Set body weight
--   Get list of workouts
--   Add new workouts
--   Add workouts to you calendar
--   Remove previously added workouts
--   Get list of activities
--   Get details about one specific activity
--   Get the step count
--   Get earned badges
--   Get available badges
--   Get details about one specific badge
+-   取得使用者資訊
+-   取得社交使用者資訊
+-   取得心率
+-   設定體重
+-   取得訓練計畫列表
+-   新增訓練計畫
+-   將訓練計畫加入行事曆
+-   移除已新增的訓練計畫
+-   取得活動列表
+-   取得特定活動的詳細資訊
+-   取得步數
+-   取得已獲得的徽章
+-   取得可用的徽章
+-   取得特定徽章的詳細資訊
