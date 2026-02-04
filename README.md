@@ -12,7 +12,7 @@ TODO:
 -   [x] Download Activity, countActivities, getActivities, getActivity, getUserProfile, getUserSettings
 -   [x] Upload Activity, delete Activity
 -   [ ] Implementation of other methods, such as Badge,Workout,Gear etc
--   [ ] Handle MFA
+-   [x] Handle MFA (with email OTP support)
 -   [x] Handle Account locked
 -   [ ] Unit test
 -   [ ] Listeners
@@ -59,6 +59,69 @@ const userProfile = await GCClient.getUserProfile();
 ```
 
 Now you can check `userProfile.userName` to verify that your login was successful.
+
+## MFA (Multi-Factor Authentication) Support
+
+If your Garmin account has MFA enabled, `login()` will return an MFA result instead of completing the login. You'll need to verify the MFA code sent to your email.
+
+### Environment Setup
+
+Set the `MFA_SECRET_KEY` environment variable (at least 32 characters) for encrypting MFA session state:
+
+```bash
+export MFA_SECRET_KEY="your-very-long-secret-key-here-32ch"
+```
+
+### Basic MFA Flow
+
+```js
+const { GarminConnect } = require('garmin-connect');
+
+const GCClient = new GarminConnect({
+    username: 'my.email@example.com',
+    password: 'MySecretPassword'
+});
+
+const result = await GCClient.login();
+
+// Check if MFA is required
+if ('needsMFA' in result && result.needsMFA) {
+    console.log('MFA required! Check your email for the verification code.');
+
+    // Get MFA code from user (via prompt, API, etc.)
+    const mfaCode = '123456'; // Code from email
+
+    // Complete login with MFA
+    await GCClient.verifyMFA(result.mfaSession, mfaCode);
+}
+
+// Now you can use the client normally
+const userProfile = await GCClient.getUserProfile();
+```
+
+### Web Application (Serverless) Flow
+
+For serverless environments like Vercel, the MFA flow works across two HTTP requests:
+
+**Request 1 - Initial Login:**
+
+```js
+const result = await GCClient.login(email, password);
+if (result.needsMFA) {
+    // Return mfaSession to frontend
+    return { needsMFA: true, mfaSession: result.mfaSession };
+}
+```
+
+**Request 2 - MFA Verification:**
+
+```js
+// Receive mfaSession and mfaCode from frontend
+await GCClient.verifyMFA(mfaSession, mfaCode);
+// Login complete!
+```
+
+See `examples/api-example.js` for a complete Vercel API implementation.
 
 ## Reusing your session(since v1.6.0)
 

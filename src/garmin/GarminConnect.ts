@@ -21,6 +21,7 @@ import {
     IUserSettings,
     IWorkout,
     IWorkoutDetail,
+    MFAResult,
     UploadFileType,
     UploadFileTypeTypeValue
 } from './types';
@@ -85,15 +86,44 @@ export default class GarminConnect {
         this.listeners = {};
     }
 
-    async login(username?: string, password?: string): Promise<GarminConnect> {
+    /**
+     * Login to Garmin Connect
+     * @param username Optional username (uses credentials from constructor if not provided)
+     * @param password Optional password (uses credentials from constructor if not provided)
+     * @returns GarminConnect instance on success, or MFAResult if MFA verification is required
+     */
+    async login(
+        username?: string,
+        password?: string
+    ): Promise<GarminConnect | MFAResult> {
         if (username && password) {
             this.credentials.username = username;
             this.credentials.password = password;
         }
-        await this.client.login(
+        const result = await this.client.login(
             this.credentials.username,
             this.credentials.password
         );
+
+        // Check if MFA is required
+        if ('needsMFA' in result && result.needsMFA) {
+            return result;
+        }
+
+        return this;
+    }
+
+    /**
+     * Complete MFA verification
+     * @param mfaSession Encrypted MFA session token from login()
+     * @param mfaCode OTP code received via email
+     * @returns GarminConnect instance on success
+     */
+    async verifyMFA(
+        mfaSession: string,
+        mfaCode: string
+    ): Promise<GarminConnect> {
+        await this.client.verifyMFA(mfaSession, mfaCode);
         return this;
     }
     exportTokenToFile(dirPath: string): void {

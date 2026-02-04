@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Garmin MFA Login Test</title>
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                    Roboto, sans-serif;
+                max-width: 400px;
+                margin: 50px auto;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .card {
+                background: white;
+                border-radius: 8px;
+                padding: 24px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            }
+            h1 {
+                font-size: 24px;
+                margin: 0 0 24px 0;
+                color: #333;
+            }
+            .form-group {
+                margin-bottom: 16px;
+            }
+            label {
+                display: block;
+                margin-bottom: 6px;
+                font-weight: 500;
+                color: #555;
+            }
+            input {
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                font-size: 16px;
+            }
+            input:focus {
+                outline: none;
+                border-color: #007bff;
+                box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+            }
+            button {
+                width: 100%;
+                padding: 12px;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            button:hover {
+                background: #0056b3;
+            }
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+            }
+            .message {
+                padding: 12px;
+                border-radius: 6px;
+                margin-bottom: 16px;
+                display: none;
+            }
+            .message.info {
+                background: #e7f3ff;
+                color: #0056b3;
+                display: block;
+            }
+            .message.error {
+                background: #ffe7e7;
+                color: #c00;
+                display: block;
+            }
+            .message.success {
+                background: #e7ffe7;
+                color: #060;
+                display: block;
+            }
+            #mfaSection {
+                display: none;
+            }
+            #mfaSection.show {
+                display: block;
+            }
+            .divider {
+                border-top: 1px solid #eee;
+                margin: 20px 0;
+            }
+            #result {
+                margin-top: 20px;
+                padding: 12px;
+                background: #f8f9fa;
+                border-radius: 6px;
+                font-family: monospace;
+                font-size: 12px;
+                white-space: pre-wrap;
+                word-break: break-all;
+                display: none;
+            }
+            #result.show {
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Garmin MFA Login Test</h1>
+
+            <div id="message" class="message"></div>
+
+            <!-- Login Section -->
+            <div id="loginSection">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input
+                        type="email"
+                        id="email"
+                        placeholder="your@email.com"
+                        required
+                    />
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input
+                        type="password"
+                        id="password"
+                        placeholder="Your password"
+                        required
+                    />
+                </div>
+                <button id="loginBtn" onclick="login()">Login</button>
+            </div>
+
+            <!-- MFA Section (hidden by default) -->
+            <div id="mfaSection">
+                <div class="divider"></div>
+                <div class="form-group">
+                    <label for="mfaCode">MFA Verification Code</label>
+                    <input
+                        type="text"
+                        id="mfaCode"
+                        placeholder="Enter code from email"
+                        maxlength="6"
+                        pattern="[0-9]*"
+                    />
+                </div>
+                <button id="mfaBtn" onclick="verifyMFA()">Verify MFA</button>
+            </div>
+
+            <div id="result"></div>
+        </div>
+
+        <script>
+            // Store MFA session between requests
+            let pendingMfaSession = null;
+            let pendingEmail = null;
+            let pendingPassword = null;
+
+            // API base URL - change this to your server
+            const API_BASE = '/api/garmin';
+
+            function showMessage(text, type = 'info') {
+                const msg = document.getElementById('message');
+                msg.textContent = text;
+                msg.className = 'message ' + type;
+            }
+
+            function showResult(data) {
+                const result = document.getElementById('result');
+                result.textContent = JSON.stringify(data, null, 2);
+                result.classList.add('show');
+            }
+
+            function setLoading(buttonId, loading) {
+                const btn = document.getElementById(buttonId);
+                btn.disabled = loading;
+                btn.textContent = loading
+                    ? 'Loading...'
+                    : buttonId === 'loginBtn'
+                    ? 'Login'
+                    : 'Verify MFA';
+            }
+
+            async function login() {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+
+                if (!email || !password) {
+                    showMessage('Please enter email and password', 'error');
+                    return;
+                }
+
+                setLoading('loginBtn', true);
+                showMessage('Logging in...', 'info');
+
+                try {
+                    const response = await fetch(`${API_BASE}/login`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email, password })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Login failed');
+                    }
+
+                    if (data.needsMFA) {
+                        // MFA required - store session and show MFA input
+                        pendingMfaSession = data.mfaSession;
+                        pendingEmail = email;
+                        pendingPassword = password;
+
+                        document
+                            .getElementById('mfaSection')
+                            .classList.add('show');
+                        document.getElementById('mfaCode').focus();
+                        showMessage(
+                            'Garmin has sent a verification code to your email. Please enter it below.',
+                            'info'
+                        );
+                    } else {
+                        // Login successful
+                        showMessage('Login successful!', 'success');
+                        showResult(data);
+                    }
+                } catch (error) {
+                    showMessage(error.message, 'error');
+                } finally {
+                    setLoading('loginBtn', false);
+                }
+            }
+
+            async function verifyMFA() {
+                const mfaCode = document.getElementById('mfaCode').value;
+
+                if (!mfaCode) {
+                    showMessage('Please enter the MFA code', 'error');
+                    return;
+                }
+
+                if (!pendingMfaSession) {
+                    showMessage(
+                        'No pending MFA session. Please login again.',
+                        'error'
+                    );
+                    return;
+                }
+
+                setLoading('mfaBtn', true);
+                showMessage('Verifying MFA code...', 'info');
+
+                try {
+                    const response = await fetch(`${API_BASE}/verify-mfa`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            mfaSession: pendingMfaSession,
+                            mfaCode: mfaCode
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(
+                            data.error || 'MFA verification failed'
+                        );
+                    }
+
+                    // MFA successful
+                    showMessage(
+                        'MFA verification successful! Login complete.',
+                        'success'
+                    );
+                    showResult(data);
+
+                    // Hide MFA section
+                    document
+                        .getElementById('mfaSection')
+                        .classList.remove('show');
+                    pendingMfaSession = null;
+                } catch (error) {
+                    showMessage(error.message, 'error');
+                } finally {
+                    setLoading('mfaBtn', false);
+                }
+            }
+
+            // Allow Enter key to submit
+            document
+                .getElementById('email')
+                .addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter')
+                        document.getElementById('password').focus();
+                });
+            document
+                .getElementById('password')
+                .addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') login();
+                });
+            document
+                .getElementById('mfaCode')
+                .addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') verifyMFA();
+                });
+        </script>
+    </body>
+</html>

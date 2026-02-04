@@ -98,4 +98,7 @@ export class UrlClass {
     get WORKOUTS() {
         return `${this.GC_API}/workout-service/workouts`;
     }
+    get MFA_VERIFY() {
+        return `${this.GARMIN_SSO}/verifyMFA/loginEnterMfaCode`;
+    }
 }

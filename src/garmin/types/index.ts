@@ -4,6 +4,25 @@ export type GCWorkoutId = string;
 export type GCBadgeId = number;
 export type GarminDomain = 'garmin.com' | 'garmin.cn';
 
+// MFA Types
+export interface MFASessionData {
+    cookies: string;
+    csrfToken: string;
+    signinParams: Record<string, string>;
+    timestamp: number;
+}
+
+export interface MFAResult {
+    needsMFA: true;
+    mfaSession: string;
+}
+
+export interface LoginSuccessResult {
+    needsMFA: false;
+}
+
+export type LoginResult = MFAResult | LoginSuccessResult;
+
 export enum ExportFileType {
     tcx = 'tcx',
     gpx = 'gpx',

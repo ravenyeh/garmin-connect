@@ -14,9 +14,18 @@ import {
     IOauth1,
     IOauth1Consumer,
     IOauth1Token,
-    IOauth2Token
+    IOauth2Token,
+    MFASessionData,
+    MFAResult,
+    LoginResult
 } from '../garmin/types';
 const crypto = require('crypto');
+
+// MFA encryption constants
+const MFA_ALGORITHM = 'aes-256-gcm';
+const MFA_IV_LENGTH = 16;
+const MFA_AUTH_TAG_LENGTH = 16;
+const MFA_SESSION_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
 const CSRF_RE = new RegExp('name="_csrf"\\s+value="(.+?)"');
 const TICKET_RE = new RegExp('ticket=([^"]+)"');
@@ -39,22 +48,40 @@ export class HttpClient {
     oauth1Token: IOauth1Token | undefined;
     oauth2Token: IOauth2Token | undefined;
     OAUTH_CONSUMER: IOauth1Consumer | undefined;
+    private cookieJar: Record<string, string> = {};
 
     constructor(url: UrlClass) {
         this.url = url;
         this.client = axios.create();
+
+        // Cookie management: send cookies with requests
+        this.client.interceptors.request.use((config) => {
+            const cookieStr = this.getCookieString();
+            if (cookieStr) {
+                config.headers['Cookie'] = cookieStr;
+            }
+            return config;
+        });
+
+        // Cookie management: capture Set-Cookie from responses
         this.client.interceptors.response.use(
-            (response) => response,
+            (response) => {
+                this.captureCookies(response);
+                return response;
+            },
             async (error) => {
+                // Capture cookies from error responses too
+                if (error?.response) {
+                    this.captureCookies(error.response);
+                }
                 const originalRequest = error.config;
-                // console.log('originalRequest:', originalRequest)
                 // Auto Refresh token
                 if (
                     error?.response?.status === 401 &&
                     !originalRequest?._retry
                 ) {
                     if (!this.oauth2Token) {
-                        return;
+                        throw error;
                     }
                     if (isRefreshing) {
                         try {
@@ -101,6 +128,34 @@ export class HttpClient {
             }
             return config;
         });
+    }
+
+    /**
+     * Parse Set-Cookie headers from response and store them
+     */
+    private captureCookies(response: AxiosResponse): void {
+        const setCookieHeaders = response.headers['set-cookie'];
+        if (setCookieHeaders) {
+            for (const cookieStr of setCookieHeaders) {
+                // Extract cookie name=value (before ;)
+                const nameValue = cookieStr.split(';')[0];
+                const eqIndex = nameValue.indexOf('=');
+                if (eqIndex > 0) {
+                    const name = nameValue.substring(0, eqIndex).trim();
+                    const value = nameValue.substring(eqIndex + 1).trim();
+                    this.cookieJar[name] = value;
+                }
+            }
+        }
+    }
+
+    /**
+     * Get all stored cookies as a Cookie header string
+     */
+    private getCookieString(): string {
+        return Object.entries(this.cookieJar)
+            .map(([name, value]) => `${name}=${value}`)
+            .join('; ');
     }
 
     async fetchOauthConsumer() {
@@ -177,15 +232,24 @@ export class HttpClient {
      * Login to Garmin Connect
      * @param username
      * @param password
-     * @returns {Promise<HttpClient>}
+     * @returns {Promise<HttpClient | MFAResult>} Returns HttpClient on success, or MFAResult if MFA is required
      */
-    async login(username: string, password: string): Promise<HttpClient> {
+    async login(
+        username: string,
+        password: string
+    ): Promise<HttpClient | MFAResult> {
         await this.fetchOauthConsumer();
-        // Step1-3: Get ticket from page.
-        const ticket = await this.getLoginTicket(username, password);
+        // Step1-3: Get ticket from page (or MFA result if MFA is required)
+        const ticketOrMFA = await this.getLoginTicket(username, password);
+
+        // Check if MFA is required
+        if (typeof ticketOrMFA === 'object' && ticketOrMFA.needsMFA) {
+            return ticketOrMFA;
+        }
+
+        const ticket = ticketOrMFA as string;
         // Step4: Oauth1
         const oauth1 = await this.getOauth1Token(ticket);
-        // TODO: Handle MFA
 
         // Step 5: Oauth2
         await this.exchange(oauth1);
@@ -195,7 +259,7 @@ export class HttpClient {
     private async getLoginTicket(
         username: string,
         password: string
-    ): Promise<string> {
+    ): Promise<string | MFAResult> {
         // Step1: Set cookie
         const step1Params = {
             clientId: 'GarminConnect',
@@ -227,9 +291,9 @@ export class HttpClient {
         // console.log('login - csrf:', csrf_token);
 
         // Step3 Get ticket
-        const signinParams = {
+        const signinParams: Record<string, string> = {
             id: 'gauth-widget',
-            embedWidget: true,
+            embedWidget: 'true',
             clientId: 'GarminConnect',
             locale: 'en',
             gauthHost: this.url.GARMIN_SSO_EMBED,
@@ -239,41 +303,249 @@ export class HttpClient {
             redirectAfterAccountCreationUrl: this.url.GARMIN_SSO_EMBED
         };
         const step3Url = `${this.url.SIGNIN_URL}?${qs.stringify(signinParams)}`;
-        // console.log('login - step3Url:', step3Url);
-        const step3Form = new FormData();
-        step3Form.append('username', username);
-        step3Form.append('password', password);
-        step3Form.append('embed', 'true');
-        step3Form.append('_csrf', csrf_token);
-        const step3Result = await this.post<string>(step3Url, step3Form, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                Dnt: 1,
-                Origin: this.url.GARMIN_SSO_ORIGIN,
-                Referer: this.url.SIGNIN_URL,
-                'User-Agent': USER_AGENT_BROWSER
-            }
-        });
+        const step3Result =
+            (await this.post<string>(
+                step3Url,
+                qs.stringify({
+                    username,
+                    password,
+                    embed: 'true',
+                    _csrf: csrf_token
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        Dnt: 1,
+                        Origin: this.url.GARMIN_SSO_ORIGIN,
+                        Referer: this.url.SIGNIN_URL,
+                        'User-Agent': USER_AGENT_BROWSER
+                    }
+                }
+            )) || '';
         // console.log('step3Result:', step3Result)
         this.handleAccountLocked(step3Result);
         this.handlePageTitle(step3Result);
-        this.handleMFA(step3Result);
+
+        // Check if MFA is required
+        if (this.detectMFA(step3Result)) {
+            // Get CSRF token from MFA page
+            const mfaCsrfResult = CSRF_RE.exec(step3Result);
+            const mfaCsrfToken = mfaCsrfResult ? mfaCsrfResult[1] : csrf_token;
+
+            // Get cookies from axios client
+            const cookies = this.serializeCookieJar();
+
+            // Create and encrypt MFA session
+            const mfaSessionData: MFASessionData = {
+                cookies,
+                csrfToken: mfaCsrfToken,
+                signinParams,
+                timestamp: Date.now()
+            };
+
+            return {
+                needsMFA: true,
+                mfaSession: this.encryptMFASession(mfaSessionData)
+            };
+        }
 
         const ticketRegResult = TICKET_RE.exec(step3Result);
         if (!ticketRegResult) {
             throw new Error(
-                'login failed (Ticket not found or MFA), please check username and password'
+                'login failed (Ticket not found), please check username and password'
             );
         }
         const ticket = ticketRegResult[1];
         return ticket;
     }
 
-    // TODO: Handle MFA
-    handleMFA(htmlStr: string): void {}
+    /**
+     * Detect if MFA is required by checking page title and content
+     */
+    private detectMFA(htmlStr: string): boolean {
+        if (!htmlStr) return false;
+
+        const titleMatch = PAGE_TITLE_RE.exec(htmlStr);
+        if (titleMatch) {
+            const title = titleMatch[1];
+            // Check title for MFA indicators
+            if (title.includes('MFA') || title.includes('Verification')) {
+                return true;
+            }
+        }
+
+        // Also check for MFA form elements in the HTML
+        // Garmin's MFA page contains these specific elements
+        if (
+            htmlStr.includes('mfa-code') ||
+            htmlStr.includes('verifyMFA') ||
+            htmlStr.includes('loginEnterMfaCode') ||
+            htmlStr.includes('verification-code') ||
+            htmlStr.includes('setupEnterMfaCode')
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Verify MFA code and complete login
+     * @param mfaSession Encrypted MFA session from login()
+     * @param mfaCode OTP code from user's email
+     */
+    async verifyMFA(mfaSession: string, mfaCode: string): Promise<HttpClient> {
+        // Decrypt session data
+        const sessionData = this.decryptMFASession(mfaSession);
+
+        // Check expiration
+        if (Date.now() - sessionData.timestamp > MFA_SESSION_EXPIRY_MS) {
+            throw new Error('MFA session expired. Please login again.');
+        }
+
+        // Restore cookies
+        this.restoreCookieJar(sessionData.cookies);
+
+        // Ensure OAuth consumer is loaded
+        if (!this.OAUTH_CONSUMER) {
+            await this.fetchOauthConsumer();
+        }
+
+        // Submit MFA code
+        const mfaUrl = `${this.url.MFA_VERIFY}?${qs.stringify(
+            sessionData.signinParams
+        )}`;
+
+        const mfaResult =
+            (await this.post<string>(
+                mfaUrl,
+                qs.stringify({
+                    'mfa-code': mfaCode,
+                    embed: 'true',
+                    _csrf: sessionData.csrfToken,
+                    fromPage: 'setupEnterMfaCode',
+                    rememberMyBrowserChecked: 'true'
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        Dnt: 1,
+                        Origin: this.url.GARMIN_SSO_ORIGIN,
+                        Referer: this.url.SIGNIN_URL,
+                        'User-Agent': USER_AGENT_BROWSER
+                    }
+                }
+            )) || '';
+
+        // Check if MFA verification succeeded
+        const titleMatch = PAGE_TITLE_RE.exec(mfaResult);
+        const title = titleMatch ? titleMatch[1] : 'Unknown';
+        if (title !== 'Success') {
+            throw new Error(`MFA verification failed. Page title: ${title}`);
+        }
+
+        // Extract ticket and complete OAuth flow
+        const ticketRegResult = TICKET_RE.exec(mfaResult);
+        if (!ticketRegResult) {
+            throw new Error('MFA verification failed: ticket not found');
+        }
+        const ticket = ticketRegResult[1];
+
+        // Complete OAuth flow
+        const oauth1 = await this.getOauth1Token(ticket);
+        await this.exchange(oauth1);
+
+        return this;
+    }
+
+    /**
+     * Serialize cookie jar to JSON string for MFA session storage
+     */
+    private serializeCookieJar(): string {
+        return JSON.stringify(this.cookieJar);
+    }
+
+    /**
+     * Restore cookie jar from serialized JSON string
+     */
+    private restoreCookieJar(serialized: string): void {
+        try {
+            this.cookieJar = JSON.parse(serialized);
+        } catch {
+            this.cookieJar = {};
+        }
+    }
+
+    /**
+     * Get MFA secret key from environment variable
+     */
+    private getMFASecretKey(): Buffer {
+        const key = process.env.MFA_SECRET_KEY;
+        if (!key || key.length < 32) {
+            throw new Error(
+                'MFA_SECRET_KEY environment variable must be at least 32 characters'
+            );
+        }
+        return Buffer.from(key.slice(0, 32), 'utf-8');
+    }
+
+    /**
+     * Encrypt MFA session data
+     */
+    private encryptMFASession(data: MFASessionData): string {
+        const iv = crypto.randomBytes(MFA_IV_LENGTH);
+        const cipher = crypto.createCipheriv(
+            MFA_ALGORITHM,
+            this.getMFASecretKey(),
+            iv
+        );
+
+        const json = JSON.stringify(data);
+        const encrypted = Buffer.concat([
+            cipher.update(json, 'utf8'),
+            cipher.final()
+        ]);
+        const authTag = cipher.getAuthTag();
+
+        // Format: iv + authTag + encrypted (Base64)
+        return Buffer.concat([iv, authTag, encrypted]).toString('base64');
+    }
+
+    /**
+     * Decrypt MFA session data
+     */
+    private decryptMFASession(encrypted: string): MFASessionData {
+        try {
+            const buffer = Buffer.from(encrypted, 'base64');
+
+            const iv = buffer.subarray(0, MFA_IV_LENGTH);
+            const authTag = buffer.subarray(
+                MFA_IV_LENGTH,
+                MFA_IV_LENGTH + MFA_AUTH_TAG_LENGTH
+            );
+            const data = buffer.subarray(MFA_IV_LENGTH + MFA_AUTH_TAG_LENGTH);
+
+            const decipher = crypto.createDecipheriv(
+                MFA_ALGORITHM,
+                this.getMFASecretKey(),
+                iv
+            );
+            decipher.setAuthTag(authTag);
+
+            const decrypted = Buffer.concat([
+                decipher.update(data),
+                decipher.final()
+            ]).toString('utf8');
+
+            return JSON.parse(decrypted);
+        } catch (error) {
+            throw new Error('Invalid or corrupted MFA session');
+        }
+    }
 
     // TODO: Handle Phone number
     handlePageTitle(htmlStr: string): void {
+        if (!htmlStr) return;
         const pageTitileRegResult = PAGE_TITLE_RE.exec(htmlStr);
         if (pageTitileRegResult) {
             const title = pageTitileRegResult[1];
@@ -289,6 +561,7 @@ export class HttpClient {
     }
 
     handleAccountLocked(htmlStr: string): void {
+        if (!htmlStr) return;
         const accountLockedRegResult = ACCOUNT_LOCKED_RE.exec(htmlStr);
         if (accountLockedRegResult) {
             const msg = accountLockedRegResult[1];
